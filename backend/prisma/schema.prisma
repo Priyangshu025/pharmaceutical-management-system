@@ -1,0 +1,362 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           String       @id @default(uuid())
+  username     String       @unique
+  email        String       @unique
+  passwordHash String
+  fullName     String
+  role         String       @default("CASHIER") // ADMIN, PHARMACIST, INVENTORY_MANAGER, CASHIER
+  phone        String?
+  isActive     Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  sales              Sale[]
+  prescriptions      Prescription[]   @relation("PharmacistVerifications")
+  stockMovements     StockMovement[]
+  auditLogs          AuditLog[]
+  purchases          Purchase[]       @relation("VerifiedPurchases")
+  returns            SaleReturn[]
+  regulatedDispenses RegulatedDispense[]
+}
+
+model Category {
+  id          String     @id @default(uuid())
+  name        String     @unique
+  description String?
+  medicines   Medicine[]
+  createdAt   DateTime   @default(now())
+}
+
+model Manufacturer {
+  id           String     @id @default(uuid())
+  name         String     @unique
+  country      String?    @default("India")
+  contactPhone String?
+  email        String?
+  medicines    Medicine[]
+  createdAt    DateTime   @default(now())
+}
+
+model Medicine {
+  id                String         @id @default(uuid())
+  name              String
+  genericName       String
+  brand             String?
+  dosageForm        String         // Tablet, Capsule, Syrup, Injection, Ointment, Drops
+  strength          String         // e.g. 500mg, 10ml, 250mg/5ml
+  packSize          String         // e.g. 10 Tablets / Strip, 100ml Bottle
+  hsnCode           String         @default("3004") // Indian GST HSN code for medicines
+  gstRate           Float          @default(12.0)   // 5%, 12%, 18%
+  scheduleType      String         @default("NONE") // NONE, SCHEDULE_H, SCHEDULE_H1, SCHEDULE_X
+  minStockThreshold Int            @default(20)
+  barcode           String?        @unique
+  description       String?
+  isActive          Boolean        @default(true)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  categoryId        String
+  category          Category       @relation(fields: [categoryId], references: [id])
+  manufacturerId    String
+  manufacturer      Manufacturer   @relation(fields: [manufacturerId], references: [id])
+
+  batches           MedicineBatch[]
+  purchaseItems     PurchaseItem[]
+  saleItems         SaleItem[]
+  stockMovements    StockMovement[]
+  regulatedDispenses RegulatedDispense[]
+}
+
+model MedicineBatch {
+  id              String         @id @default(uuid())
+  batchNumber     String
+  mfgDate         DateTime
+  expiryDate      DateTime
+  purchasePrice   Float
+  sellingPrice    Float
+  mrp             Float
+  currentQuantity Int            @default(0)
+  initialQuantity Int            @default(0)
+  status          String         @default("ACTIVE") // ACTIVE, NEAR_EXPIRY, EXPIRED, RECALLED, BLOCKED
+  rackLocation    String?        // Shelf / Rack A1, B2 etc.
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  medicineId      String
+  medicine        Medicine       @relation(fields: [medicineId], references: [id], onDelete: Cascade)
+
+  saleItems       SaleItem[]
+  stockMovements  StockMovement[]
+  regulatedDispenses RegulatedDispense[]
+  returnItems     SaleReturnItem[]
+
+  @@unique([medicineId, batchNumber])
+}
+
+model Supplier {
+  id            String      @id @default(uuid())
+  companyName   String
+  contactPerson String?
+  phone         String
+  email         String?
+  address       String?
+  gstin         String?     // 15-character Indian GSTIN
+  drugLicenseNo String?     // State Drug License
+  paymentTerms  String?     @default("30 Days Net")
+  isActive      Boolean     @default(true)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  purchases     Purchase[]
+}
+
+model Purchase {
+  id            String         @id @default(uuid())
+  poNumber      String         @unique
+  invoiceNumber String?
+  purchaseDate  DateTime       @default(now())
+  subtotal      Float          @default(0)
+  taxAmount     Float          @default(0)
+  totalAmount   Float          @default(0)
+  status        String         @default("ORDERED") // ORDERED, RECEIVED, VERIFIED, CANCELLED
+  paymentStatus String         @default("PENDING") // PAID, PARTIAL, PENDING
+  notes         String?
+  receivedAt    DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  supplierId    String
+  supplier      Supplier       @relation(fields: [supplierId], references: [id])
+  verifiedById  String?
+  verifiedBy    User?          @relation("VerifiedPurchases", fields: [verifiedById], references: [id])
+
+  items         PurchaseItem[]
+}
+
+model PurchaseItem {
+  id            String    @id @default(uuid())
+  batchNumber   String
+  mfgDate       DateTime
+  expiryDate    DateTime
+  quantity      Int
+  purchasePrice Float
+  mrp           Float
+  sellingPrice  Float
+  taxRate       Float     @default(12.0)
+  totalAmount   Float
+
+  purchaseId    String
+  purchase      Purchase  @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  medicineId    String
+  medicine      Medicine  @relation(fields: [medicineId], references: [id])
+}
+
+model Customer {
+  id            String         @id @default(uuid())
+  name          String
+  phone         String         @unique
+  email         String?
+  address       String?
+  doctorName    String?
+  allergies     String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  sales         Sale[]
+  prescriptions Prescription[]
+  returns       SaleReturn[]
+}
+
+model Sale {
+  id             String         @id @default(uuid())
+  invoiceNumber  String         @unique
+  subtotal       Float
+  discountAmount Float          @default(0)
+  taxAmount      Float          @default(0)
+  grandTotal     Float
+  paymentMethod  String         @default("CASH") // CASH, CARD, UPI, CREDIT
+  paymentStatus  String         @default("PAID") // PAID, PARTIAL, PENDING
+  status         String         @default("COMPLETED") // COMPLETED, CANCELLED, REFUNDED
+  notes          String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  customerId     String?
+  customer       Customer?      @relation(fields: [customerId], references: [id])
+  cashierId      String
+  cashier        User           @relation(fields: [cashierId], references: [id])
+  prescriptionId String?
+  prescription   Prescription?  @relation(fields: [prescriptionId], references: [id])
+
+  items          SaleItem[]
+  returns        SaleReturn[]
+  regulatedDispenses RegulatedDispense[]
+}
+
+model SaleItem {
+  id              String         @id @default(uuid())
+  quantity        Int
+  unitPrice       Float          // Selling price at moment of sale
+  mrp             Float          // Maximum Retail Price
+  discountPercent Float          @default(0)
+  taxRate         Float          @default(12.0)
+  taxAmount       Float          @default(0)
+  totalAmount     Float
+
+  saleId          String
+  sale            Sale           @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  medicineId      String
+  medicine        Medicine       @relation(fields: [medicineId], references: [id])
+  batchId         String
+  batch           MedicineBatch  @relation(fields: [batchId], references: [id])
+  returnItems     SaleReturnItem[]
+}
+
+model Prescription {
+  id                String             @id @default(uuid())
+  patientName       String
+  patientAge        Int?
+  patientGender     String?
+  doctorName        String
+  doctorRegNo       String?
+  hospitalClinic    String?
+  prescriptionDate  DateTime           @default(now())
+  imagePath         String?
+  diagnosis         String?
+  status            String             @default("PENDING") // PENDING, VERIFIED, REJECTED
+  verificationNotes String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  customerId        String?
+  customer          Customer?          @relation(fields: [customerId], references: [id])
+  verifiedById      String?
+  verifiedBy        User?              @relation("PharmacistVerifications", fields: [verifiedById], references: [id])
+
+  items             PrescriptionItem[]
+  sales             Sale[]
+}
+
+model PrescriptionItem {
+  id               String       @id @default(uuid())
+  medicineName     String
+  dosage           String?      // e.g. 1 Tablet
+  frequency        String?      // e.g. Twice daily after meals (BD)
+  durationDays     Int?         @default(5)
+  quantityRequired Int          @default(10)
+  quantityDispensed Int         @default(0)
+
+  prescriptionId   String
+  prescription     Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+}
+
+model RegulatedDispense {
+  id             String       @id @default(uuid())
+  scheduleType   String       // SCHEDULE_H, SCHEDULE_H1, SCHEDULE_X
+  patientName    String
+  patientAddress String?
+  patientPhone   String?
+  doctorName     String
+  doctorRegNo    String
+  quantity       Int
+  dispensedAt    DateTime     @default(now())
+
+  saleId         String
+  sale           Sale          @relation(fields: [saleId], references: [id])
+  medicineId     String
+  medicine       Medicine      @relation(fields: [medicineId], references: [id])
+  batchId        String
+  batch          MedicineBatch @relation(fields: [batchId], references: [id])
+  pharmacistId   String
+  pharmacist     User          @relation(fields: [pharmacistId], references: [id])
+}
+
+model StockMovement {
+  id            String       @id @default(uuid())
+  movementType  String       // PURCHASE_RECEIPT, SALE_DEDUCTION, RETURN_RESTOCK, DAMAGE_WRITEOFF, EXPIRED_DISPOSAL, INVENTORY_CORRECTION
+  quantityChange Int         // positive for in, negative for out
+  previousStock Int
+  newStock      Int
+  referenceId   String?      // invoice number, PO number, or adjustment ticket
+  reason        String?
+  createdAt     DateTime     @default(now())
+
+  medicineId    String
+  medicine      Medicine     @relation(fields: [medicineId], references: [id])
+  batchId       String
+  batch         MedicineBatch @relation(fields: [batchId], references: [id])
+  performedById String?
+  performedBy   User?        @relation(fields: [performedById], references: [id])
+}
+
+model SaleReturn {
+  id            String       @id @default(uuid())
+  returnNumber  String       @unique
+  totalRefund   Float
+  reason        String
+  createdAt     DateTime     @default(now())
+
+  saleId        String
+  sale          Sale         @relation(fields: [saleId], references: [id])
+  customerId    String?
+  customer      Customer?    @relation(fields: [customerId], references: [id])
+  processedById String
+  processedBy   User         @relation(fields: [processedById], references: [id])
+
+  items         SaleReturnItem[]
+}
+
+model SaleReturnItem {
+  id           String       @id @default(uuid())
+  quantity     Int
+  refundAmount Float
+  condition    String       @default("RESTOCKABLE") // RESTOCKABLE, DAMAGED_DISCARD
+
+  returnId     String
+  return       SaleReturn   @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  saleItemId   String
+  saleItem     SaleItem     @relation(fields: [saleItemId], references: [id])
+  batchId      String
+  batch        MedicineBatch @relation(fields: [batchId], references: [id])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userName   String
+  action     String   // e.g. AUTH_LOGIN, BATCH_CREATED, SALE_CONFIRMED, STOCK_ADJUSTED
+  entityType String   // e.g. Sale, MedicineBatch, Prescription
+  entityId   String?
+  details    String?
+  ipAddress  String?  @default("127.0.0.1")
+  createdAt  DateTime @default(now())
+
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
+}
+
+model StoreSettings {
+  id                   String   @id @default("default-store")
+  pharmacyName         String   @default("Apollo MedCare Pharmacy")
+  dlNumber20B          String   @default("WB-KOL-20B-184920")
+  dlNumber21B          String   @default("WB-KOL-21B-184921")
+  gstin                String   @default("19AAACH7409R1ZZ")
+  address              String   @default("12/B Park Street, Kolkata, West Bengal - 700016")
+  phone                String   @default("+91 98300 12345")
+  email                String   @default("contact@apollomedcare.com")
+  state                String   @default("West Bengal")
+  currencySymbol       String   @default("₹")
+  warningExpiryDays    Int      @default(90)
+  urgentExpiryDays     Int      @default(30)
+  lowStockThresholdDefault Int  @default(20)
+  receiptFooterNote    String   @default("Medicines once sold without sealed blister cannot be returned. Schedule H/H1 drugs dispensed strictly on registered medical prescription.")
+  updatedAt            DateTime @updatedAt
+}

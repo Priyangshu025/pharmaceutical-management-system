@@ -1,0 +1,14 @@
+{
+  "name": "pharmaceutical-management-system-root",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pharmaceutical Management System (PMS) Monorepo",
+  "scripts": {
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "install:all": "cd backend && npm install && cd ../frontend && npm install",
+    "prisma:seed": "cd backend && npm run prisma:seed",
+    "test:backend": "cd backend && npm test"
+  }
+}
+
