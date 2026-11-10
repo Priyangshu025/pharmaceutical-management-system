@@ -1,7 +1,9 @@
 import axios from 'axios';
 
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
+
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: API_BASE,
   headers: {
     'Content-Type': 'application/json'
   }
@@ -60,7 +62,7 @@ export const saleAPI = {
   getAll: (params) => api.get('/sales', { params }),
   getById: (id) => api.get(`/sales/${id}`),
   cancel: (id, reason) => api.post(`/sales/${id}/cancel`, { reason }),
-  getPdfUrl: (id) => `/api/sales/${id}/pdf`
+  getPdfUrl: (id) => `${API_BASE}/sales/${id}/pdf`
 };
 
 export const purchaseAPI = {

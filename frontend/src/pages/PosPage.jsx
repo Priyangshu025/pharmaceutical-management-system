@@ -895,7 +895,7 @@ export default function PosPage() {
 
               <div className="flex items-center gap-2">
                 <a
-                  href={`/api/sales/${completedSale.id}/pdf`}
+                  href={saleAPI.getPdfUrl(completedSale.id)}
                   target="_blank"
                   rel="noreferrer"
                   className="px-3.5 py-2 bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"

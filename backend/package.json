@@ -7,6 +7,9 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
+    "prepare:db": "node prisma/prepare-db.js",
+    "build": "npm run prepare:db && prisma generate && prisma db push",
+    "render:start": "npm run prepare:db && prisma generate && prisma db push && node prisma/seed.js && node server.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev --name init",
     "prisma:push": "prisma db push",
